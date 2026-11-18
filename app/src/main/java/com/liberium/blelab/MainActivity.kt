@@ -335,7 +335,7 @@ private val profiles = listOf(
 }
 
 @Composable private fun Metric(label: String, value: String) {
-    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Color(0x332A405B)).padding(10.dp)) {
+    Column(Modifier.width(88.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x332A405B)).padding(10.dp)) {
         Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
         Text(label, color = Muted, fontSize = 9.sp)
     }
