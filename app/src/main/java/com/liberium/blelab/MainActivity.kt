@@ -10,6 +10,8 @@ import android.provider.Settings
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -54,6 +56,8 @@ class MainActivity : ComponentActivity() {
     private var scanner: BluetoothLeScanner? = null
     private var advertiser: BluetoothLeAdvertiser? = null
     private var irManager: ConsumerIrManager? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var advertisingTimeout: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +75,7 @@ class MainActivity : ComponentActivity() {
             var selectedPreset by remember { mutableIntStateOf(0) }
 
             val scanPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-                val ok = if (Build.VERSION.SDK_INT >= 31) grants[Manifest.permission.BLUETOOTH_SCAN] == true else grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+                val ok = if (Build.VERSION.SDK_INT >= 31) grants[Manifest.permission.BLUETOOTH_SCAN] == true && grants[Manifest.permission.BLUETOOTH_CONNECT] == true else grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
                 if (ok) beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" }
                 else status = "Нет разрешения на BLE-сканирование"
             }
@@ -94,7 +98,7 @@ class MainActivity : ComponentActivity() {
                         NavigationRail(containerColor = Color(0xFF0D1421)) {
                             Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
                             listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv), NavItem("Точка доступа", Icons.Rounded.WifiTethering), NavItem("Монитор сети", Icons.Rounded.QueryStats)).forEach { tab ->
-                                NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 9.sp) }, alwaysShowLabel = true)
+                                NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 10.sp, fontWeight = if (selected == tab.name) FontWeight.Bold else FontWeight.Normal) }, alwaysShowLabel = true)
                             }
                         }
                         Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -142,8 +146,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scanPermissions() = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    private fun advertisePermissions() = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT) else emptyArray()
-    private fun hasScanPermission() = if (Build.VERSION.SDK_INT >= 31) ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED else ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    private fun advertisePermissions() = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE) else emptyArray()
+    private fun hasScanPermission() = if (Build.VERSION.SDK_INT >= 31) ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED else ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     private fun hasAdvertisePermission() = Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
 
     private fun beginScan(rows: MutableList<DeviceRow>, state: (Boolean) -> Unit) {
@@ -178,9 +182,17 @@ class MainActivity : ComponentActivity() {
         val preset = profiles[index.coerceIn(profiles.indices)]
         val uuid = ParcelUuid(UUID.fromString(preset.uuid))
         val payload = AdvertiseData.Builder().addServiceUuid(uuid).addServiceData(uuid, preset.payload).setIncludeDeviceName(false).build()
+        advertisingTimeout?.let(mainHandler::removeCallbacks)
         val settings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_LOW).setConnectable(false).setTimeout(30_000).build()
         advertiseCallback = object : AdvertiseCallback() {
-            override fun onStartSuccess(settingsInEffect: AdvertiseSettings) { state(true, "Тестовый BLE-маяк активен · максимум 30 секунд") }
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+                state(true, "Тестовый BLE-маяк активен · осталось до 30 секунд")
+                advertisingTimeout = Runnable {
+                    endAdvertising()
+                    state(false, "Тестовая трансляция завершена · 30 секунд")
+                }
+                mainHandler.postDelayed(advertisingTimeout!!, 30_000L)
+            }
             override fun onStartFailure(errorCode: Int) { state(false, "BLE запуск не удался · код $errorCode") }
         }
         try { bleAdvertiser.startAdvertising(settings, payload, advertiseCallback) }
@@ -188,6 +200,8 @@ class MainActivity : ComponentActivity() {
         catch (_: IllegalArgumentException) { state(false, "Пакет не поддерживается Bluetooth-контроллером") }
     }
     private fun endAdvertising() {
+        advertisingTimeout?.let(mainHandler::removeCallbacks)
+        advertisingTimeout = null
         try { advertiseCallback?.let { advertiser?.stopAdvertising(it) } } catch (_: Exception) { }
         advertiseCallback = null
     }
@@ -225,7 +239,7 @@ private val profiles = listOf(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("LIBERIUM", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 18.sp)
-                Text("BLE LAB  /  ANDROID TOOLKIT", color = Muted, fontSize = 9.sp, letterSpacing = 1.4.sp)
+                Text("BLUETOOTH И СЕТЕВЫЕ ИНСТРУМЕНТЫ", color = Muted, fontSize = 9.sp, letterSpacing = 0.5.sp)
             }
             Box(Modifier.clip(CircleShape).background(Color(0x223FE5B1)).padding(horizontal = 10.dp, vertical = 6.dp)) { Text("● READY", color = Green, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
         }
@@ -314,7 +328,7 @@ private val profiles = listOf(
 @Composable private fun LibraryScreen(selected: Int, onSelect: (Int) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
         item {
-            Text("Packet Library", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Библиотека BLE-профилей", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Встроенные безопасные профили BLE advertising", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
         }
@@ -344,7 +358,7 @@ private val profiles = listOf(
 
 @Composable private fun LabScreen(selected: Int, onSelect: (Int) -> Unit, advertising: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Advertising Lab", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("Тест BLE-маяка", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Запуск собственного тестового BLE-маяка", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(15.dp))
         Text("ВЫБЕРИ ПРОФИЛЬ", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
@@ -411,7 +425,7 @@ private val profiles = listOf(
     var brand by remember { mutableStateOf("Samsung") }
     var expanded by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Универсальный пульт", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("Пульт телевизора", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         Text("Управление по ИК — телевизору не нужен Wi-Fi", color = Muted, fontSize = 12.sp)
         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.fillMaxWidth().padding(15.dp)) {
@@ -462,7 +476,7 @@ private val profiles = listOf(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.QueryStats, null, tint = Cyan, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(9.dp))
-                        Text("NETWORK OVERVIEW", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                        Text("ОБЗОР СЕТИ", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
                     }
                     Spacer(Modifier.height(10.dp))
                     Text("Никаких выдуманных логов.", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
@@ -514,7 +528,7 @@ private val profiles = listOf(
                     Spacer(Modifier.height(10.dp))
                     Text("HOTSPOT CONTROL", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
                     Spacer(Modifier.height(7.dp))
-                    Text("Раздавай интернет\\nпод своим контролем.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Раздавай интернет.\\nПод своим контролем.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text("Включение и настройка выполняются системными средствами Android. Так приложение не обходит ограничения производителя и оператора.", color = Muted, fontSize = 12.sp)
                 }
