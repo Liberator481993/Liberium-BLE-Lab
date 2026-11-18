@@ -514,8 +514,7 @@ private val profiles = listOf(
                     Spacer(Modifier.height(10.dp))
                     Text("HOTSPOT CONTROL", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
                     Spacer(Modifier.height(7.dp))
-                    Text("Раздавай интернет
-под своим контролем.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Раздавай интернет\\nпод своим контролем.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text("Включение и настройка выполняются системными средствами Android. Так приложение не обходит ограничения производителя и оператора.", color = Muted, fontSize = 12.sp)
                 }
