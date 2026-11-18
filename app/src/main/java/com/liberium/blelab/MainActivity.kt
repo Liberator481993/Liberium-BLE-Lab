@@ -85,17 +85,19 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     containerColor = Bg,
                     contentWindowInsets = WindowInsets(0),
-                    bottomBar = {
-                        NavigationBar(containerColor = Color(0xFF0D1421)) {
+                    bottomBar = {}
+                ) { padding ->
+                    Row(Modifier.fillMaxSize().padding(padding)) {
+                        NavigationRail(containerColor = Color(0xFF0D1421), header = {
+                            Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
+                        }) {
                             listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv)).forEach { tab ->
-                                NavigationBarItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 10.sp) })
+                                NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 9.sp) }, alwaysShowLabel = true)
                             }
                         }
-                    }
-                ) { padding ->
-                    Column(Modifier.fillMaxSize().padding(padding)) {
-                        Header(status)
-                        AnimatedContent(targetState = selected, label = "screen") { screen ->
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            Header(status)
+                            AnimatedContent(targetState = selected, label = "screen") { screen ->
                             when (screen) {
                                 "Сканер" -> ScannerScreen(devices, scanning,
                                     onScan = { if (hasScanPermission()) beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } else scanPermission.launch(scanPermissions()) },
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
                                     onLab = { selected = "Лаборатория" })
                             }
                         }
+                    }
                     }
                 }
             }
