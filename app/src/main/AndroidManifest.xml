@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <application android:allowBackup="false" android:label="Liberium BLE Lab" android:theme="@android:style/Theme.Material.NoActionBar" android:supportsRtl="true">
+        <activity android:name=".AutoScannerActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
