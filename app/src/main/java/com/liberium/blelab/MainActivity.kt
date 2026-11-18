@@ -45,6 +45,7 @@ private val Violet = Color(0xFF9A7BFF)
 private val Green = Color(0xFF50E3B0)
 private val Muted = Color(0xFF91A0B8)
 
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private var scanCallback: ScanCallback? = null
     private var advertiseCallback: AdvertiseCallback? = null
@@ -88,9 +89,8 @@ class MainActivity : ComponentActivity() {
                     bottomBar = {}
                 ) { padding ->
                     Row(Modifier.fillMaxSize().padding(padding)) {
-                        NavigationRail(containerColor = Color(0xFF0D1421), header = {
+                        NavigationRail(containerColor = Color(0xFF0D1421)) {
                             Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
-                        }) {
                             listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv)).forEach { tab ->
                                 NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 9.sp) }, alwaysShowLabel = true)
                             }
