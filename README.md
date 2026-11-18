@@ -23,3 +23,9 @@ GitHub Actions builds a debug APK and uploads it as an artifact.
 The Hotspot section opens Android's system tethering settings so the owner can enable and configure their hotspot using supported device controls. Android/OEM/ carrier restrictions vary by device.
 
 The app does not inspect typed text, passwords, verification codes, messages, or social-network login data from connected devices. Ordinary Android apps do not receive universal access to the payload of hotspot clients' encrypted HTTPS traffic. The UI explicitly describes these privacy and platform limitations rather than presenting fabricated client or traffic data.
+
+
+## Network monitor and hotspot diagnostics
+The app includes a transparent network-monitor information screen and a shortcut to Android tethering settings. Android's public app APIs do not provide ordinary apps with universal access to hotspot client lists, per-client traffic, DNS queries, or encrypted browsing contents. Availability of client information in system settings varies by OEM and Android version.
+
+Domain-level diagnostics require an explicitly configured DNS service on devices whose owners have agreed to testing. Domain logs do not reveal full HTTPS URLs, page contents, passwords, messages, or form input. Liberium does not implement covert traffic interception or credential collection.
