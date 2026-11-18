@@ -130,13 +130,18 @@ class MainActivity : ComponentActivity() {
                                     Text("BLUETOOTH", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, modifier = Modifier.padding(start = 14.dp, bottom = 6.dp))
                                     listOf(
                                         NavItem("Сканер", Icons.Rounded.Radar),
+                                        NavItem("AUTO SCANNER", Icons.Rounded.Biotech),
                                         NavItem("Библиотека", Icons.Rounded.Memory),
                                         NavItem("Лаборатория", Icons.Rounded.Tune)
                                     ).forEach { tab ->
                                         NavigationDrawerItem(
                                             label = { Text(tab.name, fontWeight = FontWeight.SemiBold) },
                                             selected = selected == tab.name,
-                                            onClick = { selected = tab.name; drawerScope.launch { drawerState.close() } },
+                                            onClick = {
+                                                drawerScope.launch { drawerState.close() }
+                                                if (tab.name == "AUTO SCANNER") startActivity(Intent(this@MainActivity, AutoScannerActivity::class.java))
+                                                else selected = tab.name
+                                            },
                                             icon = { Icon(tab.icon, null) },
                                             modifier = Modifier.padding(vertical = 2.dp)
                                         )
