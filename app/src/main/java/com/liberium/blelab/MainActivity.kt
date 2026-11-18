@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     Row(Modifier.fillMaxSize().padding(padding)) {
                         NavigationRail(containerColor = Color(0xFF0D1421)) {
                             Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
-                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv), NavItem("Точка доступа", Icons.Rounded.WifiTethering)).forEach { tab ->
+                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv), NavItem("Точка доступа", Icons.Rounded.WifiTethering), NavItem("Монитор сети", Icons.Rounded.QueryStats)).forEach { tab ->
                                 NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 9.sp) }, alwaysShowLabel = true)
                             }
                         }
@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                                     onStop = { endAdvertising(); advertising = false; status = "Трансляция остановлена" })
                                 "Пульт" -> RemoteScreen(irManager?.hasIrEmitter() == true) { brand, cmd -> sendIr(brand, cmd) { status = it } }
                                 "Точка доступа" -> HotspotScreen(onOpenSettings = { openHotspotSettings { status = it } })
+                                "Монитор сети" -> NetworkMonitorScreen(onOpenSettings = { openHotspotSettings { status = it } })
                                 else -> DashboardScreen(devices.size, scanning, advertising,
                                     onScan = { selected = "Сканер"; if (!hasScanPermission()) scanPermission.launch(scanPermissions()) else beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } },
                                     onLab = { selected = "Лаборатория" })
@@ -444,6 +445,54 @@ private val profiles = listOf(
     }
 }
 
+
+
+@Composable private fun NetworkMonitorScreen(onOpenSettings: () -> Unit) {
+    LazyColumn(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Монитор сети", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Диагностика устройств, подключённых к твоей точке доступа", color = Muted, fontSize = 12.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF142D40), Color(0xFF211A3B)))).padding(17.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.QueryStats, null, tint = Cyan, modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(9.dp))
+                        Text("NETWORK OVERVIEW", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Никаких выдуманных логов.", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Android не даёт обычному приложению полный список клиентов хотспота и содержимое их соединений. Поэтому здесь не отображаются фиктивные IP, сайты или объёмы трафика.", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+        item { SectionTitle("ЧТО МОЖНО ДИАГНОСТИРОВАТЬ") }
+        item { FeatureRow(Icons.Rounded.Devices, "Клиенты хотспота", "Список устройств и их адреса — если их показывает системная прошивка. Открой системную страницу точки доступа.", Cyan) }
+        item { FeatureRow(Icons.Rounded.DataUsage, "Расход трафика", "Общий расход и статистика интерфейса доступны не для каждого производителя и не всегда разделены по клиентам.", Violet) }
+        item { FeatureRow(Icons.Rounded.Dns, "DNS-домены", "Домены можно журналировать только при отдельной, явно настроенной DNS-инфраструктуре на тестовых устройствах. Это не показывает полный URL, содержимое страниц или пароли.", Green) }
+        item {
+            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Bg), shape = RoundedCornerShape(15.dp)) {
+                Icon(Icons.Rounded.Settings, null)
+                Spacer(Modifier.width(8.dp))
+                Text("ОТКРЫТЬ НАСТРОЙКИ HOTSPOT", fontWeight = FontWeight.Bold)
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1D2A)), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(15.dp)) {
+                    Text("Прозрачный режим тестирования", color = Color(0xFFFFB4C2), fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Для записи доменов на своих устройствах потребуется явно настроить их на контролируемый DNS-сервис и уведомить пользователей. Скрытый сбор запросов, логинов, сообщений и паролей не выполняется.", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
 
 @Composable private fun HotspotScreen(onOpenSettings: () -> Unit) {
     LazyColumn(
