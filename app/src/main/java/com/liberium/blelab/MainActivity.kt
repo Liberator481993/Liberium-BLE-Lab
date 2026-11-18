@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothManager
 import android.hardware.ConsumerIrManager
 import android.bluetooth.le.*
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -91,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     Row(Modifier.fillMaxSize().padding(padding)) {
                         NavigationRail(containerColor = Color(0xFF0D1421)) {
                             Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
-                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv)).forEach { tab ->
+                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv), NavItem("Точка доступа", Icons.Rounded.WifiTethering)).forEach { tab ->
                                 NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 9.sp) }, alwaysShowLabel = true)
                             }
                         }
@@ -107,6 +109,7 @@ class MainActivity : ComponentActivity() {
                                     onStart = { if (hasAdvertisePermission()) beginAdvertising(selectedPreset) { active, msg -> advertising = active; status = msg } else advertisePermission.launch(advertisePermissions()) },
                                     onStop = { endAdvertising(); advertising = false; status = "Трансляция остановлена" })
                                 "Пульт" -> RemoteScreen(irManager?.hasIrEmitter() == true) { brand, cmd -> sendIr(brand, cmd) { status = it } }
+                                "Точка доступа" -> HotspotScreen(onOpenSettings = { openHotspotSettings { status = it } })
                                 else -> DashboardScreen(devices.size, scanning, advertising,
                                     onScan = { selected = "Сканер"; if (!hasScanPermission()) scanPermission.launch(scanPermissions()) else beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } },
                                     onLab = { selected = "Лаборатория" })
@@ -116,6 +119,24 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun openHotspotSettings(result: (String) -> Unit) {
+        val intents = listOf(
+            Intent("android.settings.TETHER_SETTINGS"),
+            Intent(Settings.ACTION_WIRELESS_SETTINGS)
+        )
+        val intent = intents.firstOrNull { it.resolveActivity(packageManager) != null }
+        if (intent == null) {
+            result("Открой настройки Android → Точка доступа и модем")
+            return
+        }
+        try {
+            startActivity(intent)
+            result("Открыты системные настройки точки доступа")
+        } catch (_: Exception) {
+            result("Не удалось открыть настройки. Перейди в Настройки Android → Точка доступа и модем")
         }
     }
 
@@ -420,5 +441,70 @@ private val profiles = listOf(
 @Composable private fun RemoteButton(symbol: String, caption: String, onClick: () -> Unit) {
     Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Panel2)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(symbol, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(caption, fontSize = 8.sp, color = Muted) }
+    }
+}
+
+
+@Composable private fun HotspotScreen(onOpenSettings: () -> Unit) {
+    LazyColumn(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp)
+    ) {
+        item {
+            Text("Точка доступа", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Управление раздачей интернета с этого Android-устройства", color = Muted, fontSize = 12.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().background(
+                        Brush.linearGradient(listOf(Color(0xFF173348), Color(0xFF211A3B)))
+                    ).padding(17.dp)
+                ) {
+                    Icon(Icons.Rounded.WifiTethering, null, tint = Cyan, modifier = Modifier.size(30.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("HOTSPOT CONTROL", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                    Spacer(Modifier.height(7.dp))
+                    Text("Раздавай интернет
+под своим контролем.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Включение и настройка выполняются системными средствами Android. Так приложение не обходит ограничения производителя и оператора.", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+        item {
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Bg),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                Icon(Icons.Rounded.Settings, null)
+                Spacer(Modifier.width(8.dp))
+                Text("ОТКРЫТЬ НАСТРОЙКИ ТОЧКИ ДОСТУПА", fontWeight = FontWeight.Bold)
+            }
+        }
+        item { SectionTitle("ИНСТРУМЕНТЫ ВЛАДЕЛЬЦА") }
+        item {
+            FeatureRow(Icons.Rounded.Devices, "Подключённые устройства", "Список клиентов зависит от версии Android и прошивки. В этой версии не показываем выдуманные данные.", Cyan)
+        }
+        item {
+            FeatureRow(Icons.Rounded.QueryStats, "Статистика трафика", "Можно учитывать общий расход сети там, где Android предоставляет системную статистику; содержимое соединений недоступно.", Violet)
+        }
+        item {
+            FeatureRow(Icons.Rounded.History, "Журнал событий", "В дальнейшем: включение точки доступа, локальные события приложения и диагностика соединения.", Green)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1D2A)), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(15.dp)) {
+                    Text("Защита приватности", color = Color(0xFFFFB4C2), fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Liberium не перехватывает ввод с клавиатуры, пароли, коды подтверждения, переписки или данные входа в соцсети. HTTPS и шифрование приложений защищают содержимое трафика. Для проверки своих устройств можно использовать отдельный тестовый стенд с демонстрационными данными.", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+        item {
+            Text("Важно: Android не предоставляет обычному приложению универсальный доступ к содержимому трафика клиентов хотспота. Реальные возможности управления зависят от модели телефона, версии Android и оператора.", color = Muted, fontSize = 11.sp)
+        }
     }
 }
