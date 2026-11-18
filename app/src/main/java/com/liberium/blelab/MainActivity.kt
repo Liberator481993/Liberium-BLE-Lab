@@ -2,6 +2,7 @@ package com.liberium.blelab
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.hardware.ConsumerIrManager
 import android.bluetooth.le.*
 import android.content.Context
 import android.content.pm.PackageManager
@@ -49,12 +50,14 @@ class MainActivity : ComponentActivity() {
     private var advertiseCallback: AdvertiseCallback? = null
     private var scanner: BluetoothLeScanner? = null
     private var advertiser: BluetoothLeAdvertiser? = null
+    private var irManager: ConsumerIrManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         scanner = adapter?.bluetoothLeScanner
         advertiser = adapter?.bluetoothLeAdvertiser
+        irManager = getSystemService(Context.CONSUMER_IR_SERVICE) as? ConsumerIrManager
 
         setContent {
             val devices = remember { mutableStateListOf<DeviceRow>() }
@@ -84,7 +87,7 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0),
                     bottomBar = {
                         NavigationBar(containerColor = Color(0xFF0D1421)) {
-                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune)).forEach { tab ->
+                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv)).forEach { tab ->
                                 NavigationBarItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 10.sp) })
                             }
                         }
@@ -101,6 +104,7 @@ class MainActivity : ComponentActivity() {
                                 "Лаборатория" -> LabScreen(selectedPreset, { selectedPreset = it }, advertising,
                                     onStart = { if (hasAdvertisePermission()) beginAdvertising(selectedPreset) { active, msg -> advertising = active; status = msg } else advertisePermission.launch(advertisePermissions()) },
                                     onStop = { endAdvertising(); advertising = false; status = "Трансляция остановлена" })
+                                "Пульт" -> RemoteScreen(irManager?.hasIrEmitter() == true) { brand, cmd -> sendIr(brand, cmd) { status = it } }
                                 else -> DashboardScreen(devices.size, scanning, advertising,
                                     onScan = { selected = "Сканер"; if (!hasScanPermission()) scanPermission.launch(scanPermissions()) else beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } },
                                     onLab = { selected = "Лаборатория" })
@@ -161,6 +165,22 @@ class MainActivity : ComponentActivity() {
     private fun endAdvertising() {
         try { advertiseCallback?.let { advertiser?.stopAdvertising(it) } } catch (_: Exception) { }
         advertiseCallback = null
+    }
+
+    private fun sendIr(brand: String, command: String, result: (String) -> Unit) {
+        val ir = irManager
+        if (ir == null || !ir.hasIrEmitter()) { result("Нет ИК-передатчика. Нужен встроенный ИК-порт или внешний адаптер; Wi-Fi телевизору не требуется."); return }
+        val code = when (brand) {
+            "Samsung" -> when (command) { "power" -> 0xE0E040BF.toInt(); "volume_up" -> 0xE0E0E01F.toInt(); "volume_down" -> 0xE0E0D02F.toInt(); "mute" -> 0xE0E0F00F.toInt(); else -> null }
+            "LG" -> when (command) { "power" -> 0x20DF10EF; "volume_up" -> 0x20DF40BF; "volume_down" -> 0x20DFC03F; "mute" -> 0x20DF906F; else -> null }
+            else -> null
+        }
+        if (code == null) { result("Для этой марки пока нет проверенного ИК-кода."); return }
+        val pattern = mutableListOf(9000, 4500)
+        for (bit in 0 until 32) { pattern.add(560); pattern.add(if (((code ushr bit) and 1) == 1) 1690 else 560) }
+        pattern.add(560)
+        try { ir.transmit(38000, pattern.toIntArray()); result("$brand · ИК-команда отправлена") }
+        catch (e: Exception) { result("Ошибка ИК-передачи: ${e.message ?: "unknown"}") }
     }
 }
 
@@ -359,4 +379,43 @@ private val profiles = listOf(
 }
 @Composable private fun SectionTitle(text: String) {
     Text(text, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+}
+
+
+@Composable private fun RemoteScreen(irAvailable: Boolean, onCommand: (String, String) -> Unit) {
+    var brand by remember { mutableStateOf("Samsung") }
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Универсальный пульт", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("Управление по ИК — телевизору не нужен Wi-Fi", color = Muted, fontSize = 12.sp)
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(15.dp)) {
+                Text("МАРКА УСТРОЙСТВА", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Box {
+                    OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(brand, modifier = Modifier.weight(1f)); Icon(Icons.Rounded.ExpandMore, null) }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        listOf("Samsung", "LG", "Sony", "Philips", "Xiaomi", "Hisense", "TCL", "Проектор").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { brand = it; expanded = false }) }
+                    }
+                }
+                Text(if (irAvailable) "ИК-передатчик обнаружен" else "ИК-передатчик не обнаружен", color = if (irAvailable) Green else Color(0xFFFFC66D), fontSize = 11.sp)
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("LIBERIUM REMOTE", color = Muted, fontSize = 10.sp, letterSpacing = 2.sp)
+                Button(onClick = { onCommand(brand, "power") }, modifier = Modifier.size(72.dp), shape = CircleShape, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB53B59))) { Icon(Icons.Rounded.PowerSettingsNew, null, modifier = Modifier.size(30.dp)) }
+                Text("ПИТАНИЕ", color = Muted, fontSize = 9.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f)) { RemoteButton("+", "ГРОМЧЕ") { onCommand(brand, "volume_up") }; Spacer(Modifier.height(8.dp)); RemoteButton("−", "ТИШЕ") { onCommand(brand, "volume_down") } }
+                    Column(Modifier.weight(1f)) { RemoteButton("M", "MUTE") { onCommand(brand, "mute") }; Spacer(Modifier.height(8.dp)); RemoteButton("↗", "SOURCE") { onCommand(brand, "source") } }
+                }
+            }
+        }
+        Text("Полностью офлайн: команды идут по ИК прямо на телевизор или проектор. Нужен встроенный ИК-передатчик телефона либо внешний адаптер. Базовые коды сейчас предусмотрены для Samsung и LG; остальные марки требуют проверенных кодов конкретных моделей.", color = Muted, fontSize = 11.sp)
+    }
+}
+@Composable private fun RemoteButton(symbol: String, caption: String, onClick: () -> Unit) {
+    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Panel2)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(symbol, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(caption, fontSize = 8.sp, color = Muted) }
+    }
 }
