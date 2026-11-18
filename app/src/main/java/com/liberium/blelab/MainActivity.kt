@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 private val Bg = Color(0xFF080B13)
@@ -73,6 +74,8 @@ class MainActivity : ComponentActivity() {
             var status by remember { mutableStateOf("Готов к работе") }
             var selected by remember { mutableStateOf("Обзор") }
             var selectedPreset by remember { mutableIntStateOf(0) }
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            val drawerScope = rememberCoroutineScope()
 
             val scanPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
                 val ok = if (Build.VERSION.SDK_INT >= 31) grants[Manifest.permission.BLUETOOTH_SCAN] == true && grants[Manifest.permission.BLUETOOTH_CONNECT] == true else grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
@@ -94,35 +97,90 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0),
                     bottomBar = {}
                 ) { padding ->
-                    Row(Modifier.fillMaxSize().padding(padding)) {
-                        NavigationRail(containerColor = Color(0xFF0D1421)) {
-                            Box(Modifier.padding(vertical = 10.dp).size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg) }
-                            listOf(NavItem("Обзор", Icons.Rounded.Dashboard), NavItem("Сканер", Icons.Rounded.Radar), NavItem("Библиотека", Icons.Rounded.Memory), NavItem("Лаборатория", Icons.Rounded.Tune), NavItem("Пульт", Icons.Rounded.Tv), NavItem("Точка доступа", Icons.Rounded.WifiTethering), NavItem("Монитор сети", Icons.Rounded.QueryStats)).forEach { tab ->
-                                NavigationRailItem(selected == tab.name, { selected = tab.name }, icon = { Icon(tab.icon, null) }, label = { Text(tab.name, fontSize = 10.sp, fontWeight = if (selected == tab.name) FontWeight.Bold else FontWeight.Normal) }, alwaysShowLabel = true)
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            ModalDrawerSheet(
+                                drawerContainerColor = Color(0xFF0D1421),
+                                drawerContentColor = Color.White
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 18.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Rounded.Bluetooth, null, tint = Bg)
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column {
+                                            Text("LIBERIUM", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
+                                            Text("BLE LAB", color = Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(24.dp))
+                                    Text("ГЛАВНОЕ", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, modifier = Modifier.padding(start = 14.dp, bottom = 6.dp))
+                                    listOf(NavItem("Обзор", Icons.Rounded.Dashboard)).forEach { tab ->
+                                        NavigationDrawerItem(
+                                            label = { Text(tab.name, fontWeight = FontWeight.SemiBold) },
+                                            selected = selected == tab.name,
+                                            onClick = { selected = tab.name; drawerScope.launch { drawerState.close() } },
+                                            icon = { Icon(tab.icon, null) },
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("BLUETOOTH", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, modifier = Modifier.padding(start = 14.dp, bottom = 6.dp))
+                                    listOf(
+                                        NavItem("Сканер", Icons.Rounded.Radar),
+                                        NavItem("Библиотека", Icons.Rounded.Memory),
+                                        NavItem("Лаборатория", Icons.Rounded.Tune)
+                                    ).forEach { tab ->
+                                        NavigationDrawerItem(
+                                            label = { Text(tab.name, fontWeight = FontWeight.SemiBold) },
+                                            selected = selected == tab.name,
+                                            onClick = { selected = tab.name; drawerScope.launch { drawerState.close() } },
+                                            icon = { Icon(tab.icon, null) },
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("УПРАВЛЕНИЕ", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, modifier = Modifier.padding(start = 14.dp, bottom = 6.dp))
+                                    listOf(
+                                        NavItem("Пульт", Icons.Rounded.Tv),
+                                        NavItem("Точка доступа", Icons.Rounded.WifiTethering),
+                                        NavItem("Монитор сети", Icons.Rounded.QueryStats)
+                                    ).forEach { tab ->
+                                        NavigationDrawerItem(
+                                            label = { Text(tab.name, fontWeight = FontWeight.SemiBold) },
+                                            selected = selected == tab.name,
+                                            onClick = { selected = tab.name; drawerScope.launch { drawerState.close() } },
+                                            icon = { Icon(tab.icon, null) },
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
-                        Column(Modifier.weight(1f).fillMaxHeight()) {
-                            Header(status)
+                    ) {
+                        Column(Modifier.fillMaxSize().padding(padding)) {
+                            Header(status) { drawerScope.launch { drawerState.open() } }
                             AnimatedContent(targetState = selected, label = "screen") { screen ->
-                            when (screen) {
-                                "Сканер" -> ScannerScreen(devices, scanning,
-                                    onScan = { if (hasScanPermission()) beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } else scanPermission.launch(scanPermissions()) },
-                                    onStop = { endScan(); scanning = false; status = "Сканирование остановлено" })
-                                "Библиотека" -> LibraryScreen(selectedPreset) { selectedPreset = it; selected = "Лаборатория" }
-                                "Лаборатория" -> LabScreen(selectedPreset, { selectedPreset = it }, advertising,
-                                    onStart = { if (hasAdvertisePermission()) beginAdvertising(selectedPreset) { active, msg -> advertising = active; status = msg } else advertisePermission.launch(advertisePermissions()) },
-                                    onStop = { endAdvertising(); advertising = false; status = "Трансляция остановлена" })
-                                "Пульт" -> RemoteScreen(irManager?.hasIrEmitter() == true) { brand, cmd -> sendIr(brand, cmd) { status = it } }
-                                "Точка доступа" -> HotspotScreen(onOpenSettings = { openHotspotSettings { status = it } })
-                                "Монитор сети" -> NetworkMonitorScreen(onOpenSettings = { openHotspotSettings { status = it } })
-                                else -> DashboardScreen(devices.size, scanning, advertising,
-                                    onScan = { selected = "Сканер"; if (!hasScanPermission()) scanPermission.launch(scanPermissions()) else beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } },
-                                    onLab = { selected = "Лаборатория" })
+                                when (screen) {
+                                    "Сканер" -> ScannerScreen(devices, scanning,
+                                        onScan = { if (hasScanPermission()) beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } else scanPermission.launch(scanPermissions()) },
+                                        onStop = { endScan(); scanning = false; status = "Сканирование остановлено" })
+                                    "Библиотека" -> LibraryScreen(selectedPreset) { selectedPreset = it; selected = "Лаборатория" }
+                                    "Лаборатория" -> LabScreen(selectedPreset, { selectedPreset = it }, advertising,
+                                        onStart = { if (hasAdvertisePermission()) beginAdvertising(selectedPreset) { active, msg -> advertising = active; status = msg } else advertisePermission.launch(advertisePermissions()) },
+                                        onStop = { endAdvertising(); advertising = false; status = "Трансляция остановлена" })
+                                    "Пульт" -> RemoteScreen(irManager?.hasIrEmitter() == true) { brand, cmd -> sendIr(brand, cmd) { status = it } }
+                                    "Точка доступа" -> HotspotScreen(onOpenSettings = { openHotspotSettings { status = it } })
+                                    "Монитор сети" -> NetworkMonitorScreen(onOpenSettings = { openHotspotSettings { status = it } })
+                                    else -> DashboardScreen(devices.size, scanning, advertising,
+                                        onScan = { selected = "Сканер"; if (!hasScanPermission()) scanPermission.launch(scanPermissions()) else beginScan(devices) { scanning = it; status = if (it) "Поиск устройств…" else "Сканирование остановлено" } },
+                                        onLab = { selected = "Лаборатория" })
+                                }
                             }
                         }
                     }
-                    }
-                }
             }
         }
     }
@@ -232,9 +290,10 @@ private val profiles = listOf(
     Profile("Лабораторный узел", "LAB", "Идентификатор собственного лабораторного BLE-узла.", "7f510003-1b15-4f0d-9a12-123456789003", byteArrayOf(0x4C, 0x41, 0x42, 0x00, 0x01))
 )
 
-@Composable private fun Header(status: String) {
+@Composable private fun Header(status: String, onMenuClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF111B2C), Color(0xFF17152D)))).padding(horizontal = 20.dp, vertical = 17.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onMenuClick) { Icon(Icons.Rounded.Menu, contentDescription = "Открыть меню", tint = Color.White) }
             Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Bluetooth, null, tint = Bg, modifier = Modifier.size(25.dp)) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
